@@ -1,96 +1,86 @@
 # XHermes (v0.5.0)
 
-**XHermes**, Android platformunda React Native (Hermes ve JSC JS motorları) tabanlı uygulamalara dinamik JavaScript betikleri enjekte etmek, özelleştirilmiş WebView arayüzleri yerleştirmek ve analitik/izleme süreçlerini agresif bir şekilde etkisiz hale getirmek için geliştirilmiş gelişmiş bir **Xposed / LSPosed & LSPatch** modülüdür.
+**XHermes**, Android ortamında React Native (Hermes ve JSC) tabanlı uygulamalarda JavaScript bundle yüklemesine müdahale etmek, harici betikler çalıştırmak, orijinal JS paketini engellemek, ekrana alternatif WebView yerleştirmek ve süreç içi boşaltma (Hollow Process) denemeleri yapmak için geliştirilmiş bir **Xposed / LSPosed / LSPatch** modülüdür.
 
 ---
 
-## 🚀 Öne Çıkan Özellikler
+## 📌 Modül Özellikleri
 
-- **Pre / Post JS Betik Enjeksiyonu**: Hedef uygulamanın React Native motoruna (Hem Legacy `CatalystInstanceImpl` hem de New Architecture Bridgeless `ReactInstance`) orijinal bundle çalışmadan önce (*Pre-script*) ve çalıştıktan sonra (*Post-script*) özel JavaScript kodları yükleme.
-- **Orijinal Paket Engelleme (Block Original Bundle)**: Hedef uygulamanın kendi orijinal JavaScript bundle'ının çalıştırılmasını C++ seviyesinde çökme yaşanmadan engelleme.
-- **Canlı WebView Arayüz Enjeksiyonu**: Uygulama açılışında orijinal React Native arayüzünü tamamen ezerek yerine canlı bir `WebView` (harici bir URL veya fallback HTML) yerleştirme.
-- **Agresif İçi Boş Süreç (Hollow Process)**:
-  - **ContentProvider Nötrleme**: `Sentry`, `Firebase`, `Adjust` vb. üçüncü taraf ContentProvider'ların `onCreate` metotlarını dinamik olarak baypas ederek başlangıç analitik yükünü sıfırlama.
-  - **Application.onCreate Baypası**: Uygulamanın ağır başlatıcılarını devre dışı bırakarak içi boş bir kabuk (Hollow Shell) oluşturma.
-  - **Ön-Örnekleme Hiyerarşik Kancalama**: `Instrumentation.newActivity` ve `AppComponentFactory.instantiateActivity` üzerinden Activity henüz örneklenmeden hiyerarşideki (`MainActivity` $\to$ `ReactActivity`) ezilmiş (overridden) metotları kancalama.
-  - **Çok Seviyeli İstisna Bastırma**: `attachBaseContext`, `onCreate`, `onWindowFocusChanged` gibi yaşam döngüsü metotlarında sıfırlanmamış NotNull değişkenlerin neden olduğu çökmeleri otomatik yakalama ve yutma.
-- **Otomatik React Native Tespiti**: `LibChecker-Rules-Bundle` entegrasyonu ile cihazda yüklü React Native uygulamalarını otomatik olarak tespit etme.
-- **Merkezi XLog Loglama**: Tüm Logcat çıktılarını tek bir merkezden (`TAG = "XHermes"`) izleme (`logcat -s XHermes`).
+- **JavaScript Betik Enjeksiyonu**:
+  - **Pre-Script**: Orijinal JS paketi yüklenmeden önce belirtilen harici `.js` dosyasını çalıştırır.
+  - **Post-Script**: Orijinal JS paketi yüklendikten sonra betiği çalıştırır.
+  - Legacy (`CatalystInstanceImpl`) ve Bridgeless (`ReactInstance`) React Native mimarilerini kancalamayı dener.
+- **Orijinal Paketi Engelleme (Block Original Bundle)**: Hedef uygulamanın kendi JavaScript bundle'ının yüklenmesini kancalar üzerinden iptal eder.
+- **WebView Enjeksiyonu**: React Native Activity açılışında yerel arayüzü ezerek ekrana `android.webkit.WebView` nesnesi yerleştirir.
+- **Hollow Process (İçi Boş Süreç) Modu**:
+  - Uygulamanın `Application.onCreate` çağrısını ve tanımlı `ContentProvider` yapılarını (Sentry, analitik vb.) atlamayı amaçlar.
+  - Activity yaşam döngüsü çağrılarındaki (`onCreate`, `onResume`, `onWindowFocusChanged` vb.) unhandled istisnaları bastırmaya çalışır.
+- **React Native Uygulama Tespiti**: Cihazda yüklü paketleri tarayarak React Native kullanan uygulamaları listede gösterir.
+- **XLog**: Logcat üzerinde log takibini `TAG = "XHermes"` etiketi altında toplar.
 
 ---
 
-## 📱 Desteklenen Uygulamalar ve Motorlar
+## ⚠️ Mevcut Kararsızlıklar ve Bilinen Sorunlar
 
-XHermes, React Native mimarisini kullanan tüm Android uygulamalarıyla uyumludur:
+XHermes deneysel bir hook modülüdür ve hedef uygulamanın React Native sürümüne ve mimarisine bağlı olarak aşağıdaki kararsızlıklar yaşanabilir:
 
+1. **WebView Enjeksiyonu ve Yaşam Döngüsü Çökmeleri**:
+   - WebView açıkken geri tuşuna (`onBackPressed`) basıldığında veya Activity arka plana alındığında (`onPause`/`onDestroy`), React Native'in kendi dahili delegatörünün (`ReactActivityDelegate`) başlatılmamış olmasından kaynaklı NullPointer istisnaları oluşabilir.
+   - Hollow Process kapalıyken (Standart WebView Modu) bazı uygulamalar orijinal bundle'ı yüklemeye devam etmek isteyebilir.
+
+2. **Hollow Process Yan Etkileri**:
+   - `Application.onCreate` ve `ContentProvider` adımları baypas edildiğinde uygulamanın C++ veya Java tarafındaki yerel bağımlılıkları ilklendirilmez. Bu durumda enjekte edilen JS betiğinin çağırdığı Native Module'ler `undefined` dönebilir veya uygulamanın kapanmasına yol açabilir.
+
+3. **React Native Sürüm Farklılıkları**:
+   - Bridgeless (New Architecture) kullanan uygulamalar ile eski mimariyi (Bridge) kullanan uygulamalarda kancalanan C++/Java sınıfları farklıdır. Her uygulama sürümünde kancalar %100 başarıyla ilklendirilemeyebilir.
+
+---
+
+## 📱 Çalışabildiği Uygulamalar
+
+React Native mimarisi (Hermes veya JSC motoru) kullanan uygulamalarda çalışması hedeflenmiştir:
 - **Discord** (`com.discord`)
-- **Wolvesville / Werewolf Online** (`com.werewolfapps.online`)
-- **Expo Framework** tabanlı uygulamalar (`ReactActivityDelegateWrapper`)
-- **React Native CLI** (Hermes veya JSC motoru kullanan tüm uygulamalar)
+- **Wolvesville** (`com.werewolfapps.online`)
+- Expo tabanlı React Native uygulamaları
+- Genel React Native CLI uygulamaları
 
 ---
 
-## 📋 Çalışma Şartları ve Gereksinimler
+## 📋 Gereksinimler ve Çalışma Şartları
 
-- **Android Sürümü**: Android 7.0 (API Level 24) ve üzeri (Önerilen: Android 9.0+ / API 28+).
-- **Xposed Ortamı**:
-  - **LSPosed** (Rootlu cihazlar / Zygisk ortamı)
-  - **LSPatch** (Rootsuz cihazlar için APK yamalama çözümü)
-- **Paket Kapsamı (Scope)**: Hedef uygulamanın LSPosed modül kapsama listesine eklenmiş olması gerekir.
-- **Önemli Güvenlik Kuralı**: Sistem framework'ü (`android` paketi) **asla** modül kapsamına eklenmemelidir. Modülde `system_server` çökmesini ve soft bootloop'u engelleyen otomatik koruma mevcuttur.
-
----
-
-## 🛠️ Kurulum ve Kullanım Rehberi
-
-1. **Modülü Aktifleştirme**:
-   - XHermes APK'sını cihazınıza yükleyin.
-   - LSPosed uygulamasını açıp **XHermes** modülünü aktifleştirin.
-   - Kancalamak istediğiniz hedef uygulamayı (örneğin Discord veya Wolvesville) modül kapsamına seçin.
-   - Cihazı veya hedef uygulamayı yeniden başlatın.
-
-2. **Arayüz Üzerinden Yapılandırma**:
-   - **XHermes** uygulamasını açın.
-   - Otomatik tespit edilen React Native uygulamaları listesinden hedef uygulamanızı seçin.
-   - İstediğiniz özellikleri aktif edin:
-     - 🟢 **Pre-Script / Post-Script**: Uygulamaya enjekte edilecek JS betiklerinizi girin.
-     - 🛑 **Block Original Bundle**: Orijinal JS paketini engelleyin.
-     - 🌐 **Inject WebView**: Web sayfası yönlendirmesini açın ve hedef URL'yi girin (Örn: `https://wolvesville.com`).
-     - ⚡ **Hollow Process (Agresif İçi Boş Süreç)**: Ağır analitik ve başlatıcıları tamamen baypas etmek için bu seçeneği açın.
-   - **Ayarları Kaydet** butonuna basın.
+- **Android Sürümü**: Android 7.0 (API 24) ve üzeri.
+- **Xposed Çerçevesi**:
+  - **LSPosed** (Rootlu cihazlar)
+  - **LSPatch** (Rootsuz cihazlar için APK yamalama)
+- **Kapsam (Scope)**: Hedef uygulamanın LSPosed üzerinde modül kapsamına eklenmesi gereklidir.
+- **Önemli**: `android` sistem paketi **asla** modül kapsamına eklenmemelidir (System Server çökmesini önlemek için).
 
 ---
 
-## 💻 Kaynak Koddan Derleme Rehberi
+## 🛠️ Kurulum ve Kullanım
+
+1. **Modülü Aktifleştirin**: XHermes APK'sını yükleyin ve LSPosed / LSPatch üzerinden hedef uygulamayı kapsama ekleyip aktifleştirin.
+2. **Ayarları Yapılandırın**: XHermes uygulamasını açın:
+   - Hedef uygulamayı seçin.
+   - Çalıştırılacak Pre/Post JS betik yollarını belirtin.
+   - WebView kullanacaksanız **Inject WebView** seçeneğini açıp URL girin.
+   - Başlatıcıları devreden çıkarmak istiyorsanız **Hollow Process** modunu seçin.
+3. **Ayarları Kaydedin** ve hedef uygulamayı yeniden başlatın.
+
+---
+
+## 💻 Kaynak Koddan Derleme
 
 ### Gereksinimler
+- Node.js `v22+`
+- JDK 17+
+- Android SDK (API 36) & NDK (`27.1.12297006`)
 
-- **Node.js**: `v22.11.0` veya üzeri
-- **JDK**: OpenJDK 17 veya üzeri
-- **Android SDK**: `API 36` (Android 16)
-- **Android NDK**: `27.1.12297006`
+### Komutlar
+```bash
+npm install
 
-### Derleme Adımları
-
-1. **Bağımlılıkları Yükleyin**:
-   ```bash
-   npm install
-   ```
-
-2. **Android Proje Klasörüne Geçin ve Derleyin**:
-   ```bash
-   cd android
-   
-   # Debug APK derleme:
-   .\gradlew.bat assembleDebug
-   
-   # Release APK derleme:
-   .\gradlew.bat assembleRelease
-   ```
-   *Çıktı konumu: `android/app/build/outputs/apk/debug/app-debug.apk`*
-
----
-
-## 📄 Lisans
-
-Bu proje özel kullanım ve araştırma amaçlı geliştirilmiştir.
+cd android
+.\gradlew.bat assembleDebug
+```
+*Derlenen APK konumu: `android/app/build/outputs/apk/debug/app-debug.apk`*
