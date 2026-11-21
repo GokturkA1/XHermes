@@ -38,11 +38,7 @@ XHermes deneysel bir hook modülüdür ve hedef uygulamanın React Native sürü
 
 ## 📱 Çalışabildiği Uygulamalar
 
-React Native mimarisi (Hermes veya JSC motoru) kullanan uygulamalarda çalışması hedeflenmiştir:
-- **Discord** (`com.discord`)
-- **Wolvesville** (`com.werewolfapps.online`)
-- Expo tabanlı React Native uygulamaları
-- Genel React Native CLI uygulamaları
+React Native mimarisi (Hermes veya JSC motoru) kullanan uygulamalarda çalışması hedeflenmiştir. Teoride tüm React Native uygulamalarında çalışabilir.
 
 ---
 
